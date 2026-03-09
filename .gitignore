@@ -1,0 +1,24 @@
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Data and models
+data/
+processed/
+models/
+kaggle_submission/
+kaggle_training_*/
+kaggle_sweep_*/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
