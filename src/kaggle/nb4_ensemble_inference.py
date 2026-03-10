@@ -40,21 +40,21 @@ MODEL_CONFIGS = [
         "path": "/kaggle/input/deep-past-byt5-small-v1",   # <-- UPDATE
         "type": "seq2seq",
         "prefix": "translate Akkadian to English: ",
-        "n_cands": 30,
+        "n_cands": 5,   # Reduced to avoid 9-hour timeout
     },
     {
         "name": "ByT5-Base",
         "path": "/kaggle/input/deep-past-byt5-base-v1",    # <-- UPDATE
         "type": "seq2seq",
         "prefix": "translate Akkadian to English: ",
-        "n_cands": 30,
+        "n_cands": 5,   # Reduced to avoid 9-hour timeout
     },
     {
         "name": "NLLB-200",
         "path": "/kaggle/input/deep-past-nllb-200-v1",     # <-- UPDATE
         "type": "seq2seq",
         "prefix": "",  # NLLB does NOT use a task prefix
-        "n_cands": 30,
+        "n_cands": 15,
     },
 ]
 
@@ -115,7 +115,9 @@ def mbr_decode(candidates):
     return unique[np.argmax(scores)]
 
 def post_process(translation, source, ne_dict):
-    if not translation: return ""
+    if not translation or pd.isna(translation) or not str(translation).strip(): 
+        return "<gap>"
+    translation = str(translation)
     for entity in ne_dict.keys():
         if len(entity) > 3 and entity in source:
             norm = normalize_entity(entity)
@@ -186,13 +188,13 @@ for i in range(0, len(source_texts), batch_size):
         else:
             input_texts = [prefix + text for text in batch_source]
 
-        inputs = t(input_texts, return_tensors="pt", max_length=512, truncation=True, padding=True)
+        inputs = t(input_texts, return_tensors="pt", max_length=1024, truncation=True, padding=True)
         inputs = {k: v.to(device) for k, v in inputs.items()}
         input_len = inputs["input_ids"].shape[1]
 
         # Sampling candidates
         with torch.no_grad():
-            outputs = m.generate(**inputs, max_length=512, num_return_sequences=nc,
+            outputs = m.generate(**inputs, max_new_tokens=512, num_return_sequences=nc,
                                  do_sample=True, temperature=0.8, top_k=50, top_p=0.95, num_beams=1)
         
         if is_causal:
@@ -205,7 +207,7 @@ for i in range(0, len(source_texts), batch_size):
 
         # Beam search diversity candidates
         with torch.no_grad():
-            outputs = m.generate(**inputs, max_length=512, num_beams=5, num_return_sequences=5)
+            outputs = m.generate(**inputs, max_new_tokens=512, num_beams=5, num_return_sequences=5)
             
         if is_causal:
             cands = [c.strip() for c in t.batch_decode(outputs[:, input_len:], skip_special_tokens=True)]
