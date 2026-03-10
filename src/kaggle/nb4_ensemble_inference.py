@@ -56,6 +56,14 @@ MODEL_CONFIGS = [
         "prefix": "",  # NLLB does NOT use a task prefix
         "n_cands": 15,
     },
+    {
+    "name": "Qwen2.5-1.5B-DoRA-v2",
+    "path": "/kaggle/input/deep-past-qwen2-5-dora-v2",  # your second model's slug
+    "type": "causal",
+    "prefix": "",
+    "n_cands": 10,  # reduce candidates if adding more models to stay within 9hrs
+},
+
 ]
 
 # --- Named Entity helpers ---
