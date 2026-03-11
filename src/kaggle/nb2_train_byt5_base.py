@@ -1,7 +1,7 @@
 # ==============================================================================
-# NOTEBOOK 2 of 4: Train ByT5-Base  (~5-8 hours on Kaggle T4)
+# NOTEBOOK 2 of 4: Train ByT5-Base  (~5-8 hours on Kaggle 2x T4)
 # ==============================================================================
-# Prerequisites: Attach "deep-past-initiative-machine-translation" dataset, enable GPU + Internet
+# Prerequisites: Attach "deep-past-initiative-machine-translation" dataset, enable 2x T4 GPU + Internet
 # After training: Download the ZIP from the Output tab for use in Notebook 4
 # ==============================================================================
 
@@ -10,7 +10,8 @@
 
 # --- CELL 2: Preprocessing (identical to Notebook 1) ---
 import os, re, json, shutil
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Force single GPU to prevent DataParallel OOM
+# Both GPUs are used via DataParallel (Trainer handles this automatically)
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import numpy as np
 import pandas as pd
 import torch
@@ -101,10 +102,15 @@ def prepare_data():
     val_df = df[df["text_id"].isin(val_text_ids)].reset_index(drop=True)
     train_df = df[~df["text_id"].isin(val_text_ids)].reset_index(drop=True)
 
-    # Skip lexicon for ByT5-Base to stay within 9h limit
-    # (15k short dictionary pairs nearly double dataset; Base learns from fewer, higher-quality pairs)
-    train_df = train_df[["transliteration", "translation"]]
-    print(f"Train: {len(train_df)} | Val: {len(val_df)} (no lexicon for speed)")
+    # Lexicon augmentation (feasible now with 2x T4 GPUs)
+    ebl = pd.read_csv(f"{DATA_DIR}/eBL_Dictionary.csv")
+    lex = []
+    for _, row in ebl.iterrows():
+        if isinstance(row.get("definition"), str) and isinstance(row.get("word"), str):
+            w, d = row["word"].strip(), row["definition"].strip().strip('"')
+            if w and d: lex.append({"transliteration": w, "translation": d})
+    train_df = pd.concat([train_df[["transliteration", "translation"]], pd.DataFrame(lex)], ignore_index=True)
+    print(f"Train: {len(train_df)} | Val: {len(val_df)} | Lexicon: {len(lex)}")
     return train_df, val_df
 
 train_df, val_df = prepare_data()
@@ -128,6 +134,7 @@ def make_compute_metrics(tokenizer):
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = T5ForConditionalGeneration.from_pretrained(MODEL_NAME)
+model.gradient_checkpointing_enable()  # Trade compute for memory – critical for 2x T4 DataParallel
 
 def tokenize(df):
     def fn(ex):
@@ -144,9 +151,9 @@ trainer = Seq2SeqTrainer(
     model=model,
     args=Seq2SeqTrainingArguments(
         output_dir=f"{MODELS_DIR}/{RUN_NAME}", run_name=RUN_NAME,
-        num_train_epochs=5, per_device_train_batch_size=2, per_device_eval_batch_size=2,
-        gradient_accumulation_steps=16, learning_rate=1e-4, warmup_steps=500, weight_decay=0.01,
-        fp16=torch.cuda.is_available(),
+        num_train_epochs=3, per_device_train_batch_size=2, per_device_eval_batch_size=2,
+        gradient_accumulation_steps=8, learning_rate=1e-4, warmup_steps=300, weight_decay=0.01,
+        fp16=torch.cuda.is_available(), gradient_checkpointing=True,
         eval_strategy="steps", eval_steps=500, save_strategy="steps", save_steps=500, save_total_limit=2,
         load_best_model_at_end=True,
         report_to="none", dataloader_num_workers=0,
