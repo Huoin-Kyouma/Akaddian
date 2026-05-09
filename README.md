@@ -18,7 +18,6 @@ The codebase is organized into local Command Line scripts (`src/cli/`) and stand
 
 ```text
 .
-├── docs/                   # AI planning, walkthroughs, and task tracking
 ├── run.sh                  # Main orchestrator pipeline for local execution
 ├── src/
 │   ├── cli/                # Local training and evaluation modules
